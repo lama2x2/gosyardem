@@ -1,0 +1,23 @@
+# FastAPI & server
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+psycopg2-binary==2.9.10
+
+# Auth (for future API)
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Admin
+sqladmin==0.16.1
+
+# Telegram bot
+python-telegram-bot==21.7
+httpx==0.28.0
+
+# Config
+pydantic-settings==2.6.1
