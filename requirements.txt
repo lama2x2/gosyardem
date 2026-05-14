@@ -1,6 +1,7 @@
 # FastAPI & server
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
+itsdangerous==2.2.0
 
 # Database
 sqlalchemy[asyncio]==2.0.36

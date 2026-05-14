@@ -1,6 +1,8 @@
 from sqladmin import Admin, ModelView
 from sqladmin.application import Admin as AdminApp
 
+from app.admin_auth import AdminAuth
+from app.config import settings
 from app.database import engine
 from app.models import User, CitizenRequest, RequestType, Proof
 from app.models.user import UserRole, UserSource
@@ -67,7 +69,13 @@ class ProofAdmin(ModelView, model=Proof):
 
 
 def setup_admin(app) -> AdminApp:
-    admin = Admin(app, engine, base_url="/admin", title="Платформа помощи гражданам")
+    admin = Admin(
+        app,
+        engine,
+        base_url="/admin",
+        title="Платформа помощи гражданам",
+        authentication_backend=AdminAuth(settings.secret_key),
+    )
     admin.add_view(UserAdmin)
     admin.add_view(CitizenRequestAdmin)
     admin.add_view(RequestTypeAdmin)
