@@ -29,10 +29,10 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-2. Поднять PostgreSQL и задать в `.env`:
+2. Поднять PostgreSQL и задать в `.env` (URL собирается в коде из переменных):
 
-- `DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/citizen_support`
-- `DATABASE_URL_SYNC=postgresql://user:password@localhost:5432/citizen_support`
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
+- `POSTGRES_HOST=localhost` при запуске API на хосте; при запуске через Docker в `.env` должен быть хост БД в сети compose — здесь `POSTGRES_HOST=db` (имя сервиса `db` в `docker-compose.yml`), порт `5432`
 
 3. Применить миграции:
 
