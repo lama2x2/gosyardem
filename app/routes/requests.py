@@ -1,5 +1,6 @@
 """Заявки: создание, список, обновление статуса, назначение, оценка/отзыв гражданина."""
 
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,12 +19,15 @@ from app.schemas.request import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
-async def _sole_operator_id(db: AsyncSession) -> Optional[int]:
-    """Если в системе ровно один оператор — вернуть его id для автоназначения."""
+async def _operator_ids(db: AsyncSession) -> list[int]:
     result = await db.execute(select(User.id).where(User.role == UserRole.operator))
-    operator_ids = [row[0] for row in result.all()]
+    return [row[0] for row in result.all()]
+
+
+def _pick_assigned_operator(operator_ids: list[int]) -> Optional[int]:
     if len(operator_ids) == 1:
         return operator_ids[0]
     return None
@@ -47,9 +51,33 @@ async def create_request(
     """
     user = await db.get(User, body.user_id)
     if not user:
+        logger.warning("Создание заявки отклонено: пользователь user_id=%s не найден", body.user_id)
         raise HTTPException(404, "User not found")
 
-    assigned_operator_id = await _sole_operator_id(db)
+    operator_ids = await _operator_ids(db)
+    assigned_operator_id = _pick_assigned_operator(operator_ids)
+
+    logger.info(
+        "Заявка: входящие данные — user_id=%s role=%s telegram_id=%s username=%s "
+        "title=%r address=%r type_id=%s has_photo=%s operators_in_db=%s",
+        user.id,
+        user.role.value,
+        user.telegram_id,
+        user.username,
+        body.title,
+        body.address,
+        body.type_id,
+        bool(body.photo_file_id),
+        operator_ids,
+    )
+
+    if assigned_operator_id is not None:
+        logger.info("Заявка: автоназначение на operator_id=%s", assigned_operator_id)
+    else:
+        logger.info(
+            "Заявка: автоназначение не выполнено (операторов=%s, нужен ровно 1)",
+            len(operator_ids),
+        )
 
     req = CitizenRequest(
         user_id=body.user_id,
@@ -64,6 +92,19 @@ async def create_request(
     db.add(req)
     await db.flush()
     await db.refresh(req)
+
+    logger.info(
+        "Заявка создана: id=%s user_id=%s status=%s operator_id=%s executor_id=%s "
+        "title=%r address=%r photo_file_id=%s",
+        req.id,
+        req.user_id,
+        req.status.value,
+        req.assigned_operator_id,
+        req.assigned_executor_id,
+        req.title,
+        req.address,
+        req.photo_file_id or "—",
+    )
     return req
 
 
