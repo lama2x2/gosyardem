@@ -1,6 +1,6 @@
 """Заявки: создание, список, обновление статуса, назначение, оценка/отзыв гражданина."""
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models import CitizenRequest, User
 from app.models.request import RequestStatus as ModelRequestStatus
+from app.models.user import UserRole
 from app.schemas.request import (
     CitizenRequestCreate,
     CitizenRequestRead,
@@ -17,6 +18,15 @@ from app.schemas.request import (
 )
 
 router = APIRouter()
+
+
+async def _sole_operator_id(db: AsyncSession) -> Optional[int]:
+    """Если в системе ровно один оператор — вернуть его id для автоназначения."""
+    result = await db.execute(select(User.id).where(User.role == UserRole.operator))
+    operator_ids = [row[0] for row in result.all()]
+    if len(operator_ids) == 1:
+        return operator_ids[0]
+    return None
 
 
 @router.get("/", response_model=List[CitizenRequestRead])
@@ -38,6 +48,9 @@ async def create_request(
     user = await db.get(User, body.user_id)
     if not user:
         raise HTTPException(404, "User not found")
+
+    assigned_operator_id = await _sole_operator_id(db)
+
     req = CitizenRequest(
         user_id=body.user_id,
         type_id=body.type_id,
@@ -45,6 +58,7 @@ async def create_request(
         description=body.description,
         address=body.address,
         photo_file_id=body.photo_file_id,
+        assigned_operator_id=assigned_operator_id,
         status=ModelRequestStatus.created,
     )
     db.add(req)
