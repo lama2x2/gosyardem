@@ -12,6 +12,7 @@ from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 
 from app.config import settings
+from app.labels import request_status_ru
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +194,7 @@ async def finalize_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         photo_note = " Фото прикреплено." if req.get("photo_file_id") else ""
         await safe_reply(
             update.message,
-            f"Заявка №{req['id']} создана. Статус: {req['status']}.{photo_note} "
+            f"Заявка №{req['id']} создана. Статус: {request_status_ru(req['status'])}.{photo_note} "
             "Вы получите уведомление при изменении.",
         )
     else:
@@ -230,7 +231,7 @@ async def my_requests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     lines = []
     for r in my[:20]:
-        line = f"№{r['id']} — {r['title']} ({r['status']})"
+        line = f"№{r['id']} — {r['title']} ({request_status_ru(r['status'])})"
         if r.get("photo_file_id"):
             line += " 📷"
         lines.append(line)
