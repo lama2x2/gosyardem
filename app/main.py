@@ -26,6 +26,14 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE requests ADD COLUMN IF NOT EXISTS photo_file_id VARCHAR(512)"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_name VARCHAR(255)"
+            )
+        )
+        await conn.execute(
+            text("ALTER TABLE proofs ALTER COLUMN file_ref DROP NOT NULL")
+        )
     await start_bot()
     yield
     await stop_bot()

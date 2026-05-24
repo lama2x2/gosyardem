@@ -31,7 +31,14 @@ class UserCreate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     telegram_id: Optional[int] = None
+    telegram_name: Optional[str] = None
     role: UserRole = UserRole.citizen
+
+
+class UserProfileUpdate(BaseModel):
+    """Имя из профиля Telegram (first_name + last_name)."""
+
+    telegram_name: Optional[str] = None
 
 
 class UserRead(BaseModel):
@@ -39,6 +46,7 @@ class UserRead(BaseModel):
 
     id: int
     telegram_id: Optional[int]
+    telegram_name: Optional[str]
     username: Optional[str]
     role: UserRole
     source: UserSource

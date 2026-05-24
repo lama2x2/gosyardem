@@ -25,7 +25,7 @@ class Proof(Base):
     executor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     operator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
-    file_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    file_ref: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[ProofStatus] = mapped_column(default=ProofStatus.pending, nullable=False)
 

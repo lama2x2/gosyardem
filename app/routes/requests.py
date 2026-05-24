@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import CitizenRequest, User
+from app.models import CitizenRequest, RequestType, User
 from app.models.request import RequestStatus as ModelRequestStatus
 from app.models.user import UserRole
 from app.schemas.request import (
@@ -138,6 +138,13 @@ async def update_request(
         req.assigned_operator_id = body.assigned_operator_id
     if body.assigned_executor_id is not None:
         req.assigned_executor_id = body.assigned_executor_id
+        if req.status == ModelRequestStatus.created:
+            req.status = ModelRequestStatus.in_progress
+    if body.type_id is not None:
+        rt = await db.get(RequestType, body.type_id)
+        if not rt:
+            raise HTTPException(404, "Request type not found")
+        req.type_id = body.type_id
     await db.flush()
     await db.refresh(req)
     return req

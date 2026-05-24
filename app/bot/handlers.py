@@ -6,17 +6,25 @@
 import logging
 from typing import Optional
 
-import httpx
 from telegram import Message, Update
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 
-from app.config import settings
+from app.bot import api_client
+from app.bot.notify import notify_user_id
+from app.bot.profile import display_name_from_telegram, sync_profile
+from app.bot.staff_handlers import (
+    handle_proof_comment_text,
+    handle_proof_photo,
+    handle_rating_review_text,
+    role_help,
+    send_request_list,
+    skip_proof_photo,
+    skip_rating_review,
+)
 from app.labels import request_status_ru
 
 logger = logging.getLogger(__name__)
-
-API_BASE = f"{settings.api_base_url.rstrip('/')}/api"
 
 
 async def safe_reply(message: Optional[Message], text: str) -> None:
@@ -28,49 +36,46 @@ async def safe_reply(message: Optional[Message], text: str) -> None:
         logger.exception("Не удалось отправить сообщение в Telegram")
 
 
-async def get_user_by_telegram_id(telegram_id: int) -> Optional[dict]:
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.get(f"{API_BASE}/users/by-telegram/{telegram_id}")
-            if r.status_code != 200:
-                return None
-            return r.json()
-    except httpx.HTTPError:
-        logger.exception("Ошибка API при поиске пользователя")
-        return None
-
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user or not update.message:
         return
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.get(f"{API_BASE}/users/by-telegram/{user.id}")
-            if r.status_code == 404:
-                reg = await client.post(
-                    f"{API_BASE}/users/",
-                    json={"telegram_id": user.id, "role": "citizen"},
-                )
-                if reg.status_code in (200, 201):
-                    await safe_reply(
-                        update.message,
-                        "Добро пожаловать! Вы зарегистрированы как гражданин. "
-                        "Используйте /new для создания заявки, /list — для просмотра заявок.",
-                    )
-                    return
-            elif r.status_code == 200:
-                await safe_reply(
-                    update.message,
-                    "С возвращением! Используйте /new для заявки, /list — мои заявки, /help — справка.",
-                )
-                return
-    except httpx.HTTPError:
-        logger.exception("Ошибка API при регистрации")
-    await safe_reply(
-        update.message,
-        "Платформа помощи гражданам. Используйте /help для списка команд.",
-    )
+    await sync_profile(update)
+    me = await api_client.get_user_by_telegram_id(user.id)
+    if not me:
+        me = await api_client.register_citizen(user.id, display_name_from_telegram(user))
+        if me:
+            await safe_reply(
+                update.message,
+                "Добро пожаловать! Вы зарегистрированы как гражданин.\n"
+                "Используйте /new для создания заявки, /list — для просмотра.\n"
+                "/help — справка.",
+            )
+            return
+        await safe_reply(
+            update.message,
+            "Не удалось зарегистрироваться. Если вы оператор или исполнитель — "
+            "учётная запись должна быть создана администратором с вашим Telegram ID.",
+        )
+        return
+
+    role = me["role"]
+    if role == "citizen":
+        text = (
+            "С возвращением! /new — новая заявка, /list — мои заявки, /help — справка."
+        )
+    elif role == "operator":
+        text = (
+            "С возвращением, оператор! /list — заявки с фото и назначением исполнителей, "
+            "/help — справка."
+        )
+    elif role == "executor":
+        text = (
+            "С возвращением, исполнитель! /list — ваши заявки, пруфы и статусы. /help — справка."
+        )
+    else:
+        text = "С возвращением! /list — заявки, /help — справка."
+    await safe_reply(update.message, text)
 
 
 NEW_REQUEST_INTRO = (
@@ -84,6 +89,13 @@ NEW_REQUEST_INTRO = (
 
 
 async def create_request_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await sync_profile(update)
+    me = await api_client.get_user_by_telegram_id(
+        update.effective_user.id if update.effective_user else 0
+    )
+    if not me or me["role"] != "citizen":
+        await safe_reply(update.message, "Создавать заявки могут только граждане.")
+        return
     await safe_reply(update.message, NEW_REQUEST_INTRO)
     context.user_data["creating_request"] = {"step": "title"}
 
@@ -111,6 +123,11 @@ async def create_request_address(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def handle_create_request_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await sync_profile(update)
+    if await handle_proof_comment_text(update, context):
+        return
+    if await handle_rating_review_text(update, context):
+        return
     step = context.user_data.get("creating_request", {}).get("step")
     if step == "title":
         await create_request_title(update, context)
@@ -133,6 +150,9 @@ async def create_request_description(update: Update, context: ContextTypes.DEFAU
 
 
 async def handle_request_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await sync_profile(update)
+    if await handle_proof_photo(update, context):
+        return
     data = context.user_data.get("creating_request")
     if not data or data.get("step") != "photo":
         return
@@ -143,11 +163,17 @@ async def handle_request_photo(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.user_data.get("uploading_proof"):
+        await skip_proof_photo(update, context)
+        return
+    if context.user_data.get("rating_request"):
+        await skip_rating_review(update, context)
+        return
     data = context.user_data.get("creating_request")
     if not data or data.get("step") != "photo":
         await safe_reply(
             update.message,
-            "Команда /skip доступна только на шаге 4 — когда бот просит фото.",
+            "Команда /skip: фото заявки (шаг 4), фото пруфа (шаг 2) или отзыв.",
         )
         return
     await finalize_request(update, context)
@@ -164,7 +190,7 @@ async def finalize_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     photo_file_id = data.get("photo_file_id")
     telegram_id = update.effective_user.id if update.effective_user else 0
 
-    citizen = await get_user_by_telegram_id(telegram_id)
+    citizen = await api_client.get_user_by_telegram_id(telegram_id)
     if not citizen:
         await safe_reply(update.message, "Вы не зарегистрированы. Нажмите /start для регистрации.")
         context.user_data.pop("creating_request", None)
@@ -179,72 +205,42 @@ async def finalize_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         "photo_file_id": photo_file_id,
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(f"{API_BASE}/requests/", json=payload)
-    except httpx.HTTPError:
-        logger.exception("Ошибка API при создании заявки")
+    req = await api_client.create_request(payload)
+    context.user_data.pop("creating_request", None)
+    if not req:
         await safe_reply(update.message, "Не удалось создать заявку. Попробуйте позже.")
-        context.user_data.pop("creating_request", None)
         return
 
-    context.user_data.pop("creating_request", None)
-    if r.status_code in (200, 201):
-        req = r.json()
-        photo_note = " Фото прикреплено." if req.get("photo_file_id") else ""
-        await safe_reply(
-            update.message,
-            f"Заявка №{req['id']} создана. Статус: {request_status_ru(req['status'])}.{photo_note} "
-            "Вы получите уведомление при изменении.",
+    photo_note = " Фото прикреплено." if req.get("photo_file_id") else ""
+    await safe_reply(
+        update.message,
+        f"Заявка №{req['id']} создана. Статус: {request_status_ru(req['status'])}.{photo_note} "
+        "Вы получите уведомление при изменении.",
+    )
+    if req.get("assigned_operator_id"):
+        await notify_user_id(
+            req["assigned_operator_id"],
+            f"Новая заявка №{req['id']}: {req['title']}.",
+            req.get("photo_file_id"),
+            request_id=req["id"],
         )
-    else:
-        await safe_reply(update.message, "Не удалось создать заявку. Попробуйте позже.")
 
 
 async def my_requests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await sync_profile(update)
     telegram_id = update.effective_user.id if update.effective_user else 0
-    me = await get_user_by_telegram_id(telegram_id)
+    me = await api_client.get_user_by_telegram_id(telegram_id)
     if not me:
         await safe_reply(update.message, "Пользователь не найден. Нажмите /start.")
         return
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            reqs_r = await client.get(f"{API_BASE}/requests/")
-            if reqs_r.status_code != 200:
-                await safe_reply(update.message, "Ошибка загрузки заявок.")
-                return
-            reqs = reqs_r.json()
-    except httpx.HTTPError:
-        logger.exception("Ошибка API при загрузке заявок")
-        await safe_reply(update.message, "Ошибка загрузки заявок.")
+    if not update.message:
         return
-
-    if me["role"] == "citizen":
-        my = [r for r in reqs if r["user_id"] == me["id"]]
-    else:
-        my = [
-            r for r in reqs
-            if r.get("assigned_operator_id") == me["id"] or r.get("assigned_executor_id") == me["id"]
-        ]
-    if not my:
-        await safe_reply(update.message, "У вас пока нет заявок.")
-        return
-    lines = []
-    for r in my[:20]:
-        line = f"№{r['id']} — {r['title']} ({request_status_ru(r['status'])})"
-        if r.get("photo_file_id"):
-            line += " 📷"
-        lines.append(line)
-    await safe_reply(update.message, "Ваши заявки:\n" + "\n".join(lines))
+    await send_request_list(update.message, me, context)
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await safe_reply(
-        update.message,
-        "Команды:\n"
-        "/start — начать\n"
-        "/new — создать заявку (название → адрес → описание → фото)\n"
-        "/list — мои заявки\n"
-        "/skip — пропустить фото на шаге 4\n"
-        "/help — эта справка",
-    )
+    await sync_profile(update)
+    telegram_id = update.effective_user.id if update.effective_user else 0
+    me = await api_client.get_user_by_telegram_id(telegram_id)
+    role = me["role"] if me else "citizen"
+    await safe_reply(update.message, role_help(role))

@@ -1,24 +1,30 @@
 """Пользователи: список, создание операторов/исполнителей/суперюзера (по роли)."""
 
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
 from app.models import User
 from app.models.user import UserRole
-from app.schemas.user import UserCreate, UserRead
+from app.schemas.user import UserCreate, UserProfileUpdate, UserRead
 from app.auth import get_password_hash
 
 router = APIRouter()
 
 
 @router.get("/", response_model=List[UserRead])
-async def list_users(db: AsyncSession = Depends(get_db)):
-    """Список пользователей (для админки/операций)."""
-    result = await db.execute(select(User))
+async def list_users(
+    role: Optional[UserRole] = Query(None, description="Фильтр по роли (executor, operator, …)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список пользователей (для админки/бота)."""
+    q = select(User)
+    if role is not None:
+        q = q.where(User.role == role)
+    result = await db.execute(q)
     return list(result.scalars().all())
 
 
@@ -29,6 +35,25 @@ async def get_user_by_telegram(telegram_id: int, db: AsyncSession = Depends(get_
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "User not found")
+    return user
+
+
+@router.patch("/by-telegram/{telegram_id}/profile", response_model=UserRead)
+async def update_telegram_profile(
+    telegram_id: int,
+    body: UserProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Обновить отображаемое имя из профиля Telegram (вызывается ботом)."""
+    result = await db.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if body.telegram_name is not None:
+        name = body.telegram_name.strip()
+        user.telegram_name = name or None
+    await db.flush()
+    await db.refresh(user)
     return user
 
 
@@ -58,6 +83,7 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db)):
             password_hash=None,
             role=UserRole.citizen,
             telegram_id=body.telegram_id,
+            telegram_name=body.telegram_name,
         )
     else:
         if not body.username or not body.password:
@@ -70,6 +96,7 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db)):
             password_hash=get_password_hash(body.password),
             role=UserRole(body.role.value),
             telegram_id=body.telegram_id,
+            telegram_name=body.telegram_name,
         )
     db.add(user)
     await db.flush()

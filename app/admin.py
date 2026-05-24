@@ -9,6 +9,7 @@ from app.models import User, CitizenRequest, RequestType, Proof
 _USER_COLUMNS = [
     User.id,
     User.telegram_id,
+    User.telegram_name,
     User.username,
     User.password_hash,
     User.role,

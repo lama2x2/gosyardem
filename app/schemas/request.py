@@ -35,6 +35,7 @@ class CitizenRequestUpdate(BaseModel):
     citizen_review: Optional[str] = None
     assigned_operator_id: Optional[int] = None
     assigned_executor_id: Optional[int] = None
+    type_id: Optional[int] = None
 
 
 class CitizenRequestRead(BaseModel):

@@ -18,8 +18,8 @@ class ProofCreate(BaseModel):
 
     request_id: int
     executor_id: int
-    file_ref: str
-    comment: Optional[str] = None
+    file_ref: Optional[str] = None
+    comment: str
 
 
 class ProofDecide(BaseModel):
@@ -36,7 +36,7 @@ class ProofRead(BaseModel):
     request_id: int
     executor_id: int
     operator_id: Optional[int]
-    file_ref: str
+    file_ref: Optional[str]
     comment: Optional[str]
     status: ProofStatus
     created_at: datetime

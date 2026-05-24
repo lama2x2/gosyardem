@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models import Proof, CitizenRequest
 from app.models.proof import ProofStatus as ModelProofStatus
+from app.models.request import RequestStatus as ModelRequestStatus
 from app.schemas.proof import ProofCreate, ProofRead, ProofDecide, ProofStatus
 
 router = APIRouter()
@@ -34,6 +35,8 @@ async def create_proof(
     req = await db.get(CitizenRequest, body.request_id)
     if not req:
         raise HTTPException(404, "Request not found")
+    if not body.comment or not body.comment.strip():
+        raise HTTPException(400, "Proof comment is required")
     proof = Proof(
         request_id=body.request_id,
         executor_id=body.executor_id,
@@ -41,6 +44,7 @@ async def create_proof(
         comment=body.comment,
         status=ModelProofStatus.pending,
     )
+    req.status = ModelRequestStatus.proof_under_review
     db.add(proof)
     await db.flush()
     await db.refresh(proof)
@@ -69,6 +73,12 @@ async def decide_proof(
         raise HTTPException(400, "Proof already decided")
     proof.status = ModelProofStatus(body.status.value)
     proof.operator_id = body.operator_id
+    req = await db.get(CitizenRequest, proof.request_id)
+    if req:
+        if body.status == ProofStatus.approved:
+            req.status = ModelRequestStatus.completed
+        elif body.status == ProofStatus.rejected:
+            req.status = ModelRequestStatus.in_progress
     await db.flush()
     await db.refresh(proof)
     return proof

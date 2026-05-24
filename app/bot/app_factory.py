@@ -6,6 +6,7 @@ from typing import Optional
 from telegram import Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -22,10 +23,15 @@ from app.bot.handlers import (
     handle_request_photo,
     skip_photo,
 )
+from app.bot.staff_handlers import callback_handler
 
 logger = logging.getLogger(__name__)
 
 _bot_application: Optional[Application] = None
+
+
+def get_bot_application() -> Optional[Application]:
+    return _bot_application
 
 
 async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -54,6 +60,7 @@ def build_application() -> Optional[Application]:
     app.add_handler(CommandHandler("list", my_requests))
     app.add_handler(CommandHandler("new", create_request_start))
     app.add_handler(CommandHandler("skip", skip_photo))
+    app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.PHOTO, handle_request_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_create_request_text))
 
