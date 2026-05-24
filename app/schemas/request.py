@@ -23,6 +23,7 @@ class CitizenRequestCreate(BaseModel):
     description: Optional[str] = None
     address: Optional[str] = None
     type_id: Optional[int] = None
+    photo_file_id: Optional[str] = None
 
 
 class CitizenRequestUpdate(BaseModel):
@@ -48,6 +49,7 @@ class CitizenRequestRead(BaseModel):
     title: str
     description: Optional[str]
     address: Optional[str]
+    photo_file_id: Optional[str]
     rating: Optional[int]
     citizen_confirmed: Optional[bool]
     citizen_review: Optional[str]

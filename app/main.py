@@ -1,18 +1,34 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.admin import setup_admin
+from app.bot.app_factory import start_bot, stop_bot
 from app.database import engine, Base
 from app.routes import requests, users, proofs, request_types
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            text(
+                "ALTER TABLE requests ADD COLUMN IF NOT EXISTS photo_file_id VARCHAR(512)"
+            )
+        )
+    await start_bot()
     yield
+    await stop_bot()
     await engine.dispose()
 
 

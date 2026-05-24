@@ -31,6 +31,7 @@ class CitizenRequestAdmin(ModelView, model=CitizenRequest):
         CitizenRequest.assigned_operator_id,
         CitizenRequest.assigned_executor_id,
         CitizenRequest.title,
+        CitizenRequest.photo_file_id,
         CitizenRequest.created_at,
     ]
     column_searchable_list = [CitizenRequest.title, CitizenRequest.description]
@@ -44,6 +45,7 @@ class CitizenRequestAdmin(ModelView, model=CitizenRequest):
         CitizenRequest.title,
         CitizenRequest.description,
         CitizenRequest.address,
+        CitizenRequest.photo_file_id,
         CitizenRequest.rating,
         CitizenRequest.citizen_confirmed,
         CitizenRequest.citizen_review,

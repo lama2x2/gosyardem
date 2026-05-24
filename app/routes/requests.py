@@ -44,6 +44,7 @@ async def create_request(
         title=body.title,
         description=body.description,
         address=body.address,
+        photo_file_id=body.photo_file_id,
         status=ModelRequestStatus.created,
     )
     db.add(req)

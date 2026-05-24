@@ -19,6 +19,9 @@ API: http://localhost:8000
 Swagger: http://localhost:8000/docs  
 Админка: http://localhost:8000/admin  
 
+Telegram-бот стартует **вместе с API** (нужен `TELEGRAM_BOT_TOKEN` в `.env`).  
+При ошибках бота API продолжает работать.
+
 ## Локальный запуск (без Docker)
 
 1. Создать виртуальное окружение и установить зависимости:
@@ -46,11 +49,15 @@ alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-5. (Опционально) Запустить бота (нужен `TELEGRAM_BOT_TOKEN` в `.env`):
+5. Указать `TELEGRAM_BOT_TOKEN` в `.env` — бот запустится вместе с API.
+
+   Отдельный запуск бота (только для отладки):
 
 ```bash
 python -m app.bot.run_bot
 ```
+
+   Создание заявки в боте: `/new` → название → адрес → описание → фото или `/skip`.
 
 ## Скрипты
 

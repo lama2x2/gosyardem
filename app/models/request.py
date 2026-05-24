@@ -38,6 +38,7 @@ class CitizenRequest(Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     address: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    photo_file_id: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     citizen_confirmed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
